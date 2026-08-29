@@ -1,0 +1,18 @@
+server:
+  port: 8080
+
+matching:
+  interval: 1s
+  # dev-friendly: ratings are random in 1000..3000, so let anyone pair with anyone right away.
+  # production-like values would be base 25 / +5 per second / cap 300 (±50 at join, widening to ±300).
+  base-penalty: 1000
+  penalty-per-second: 5
+  max-penalty: 1000
+
+players:
+  accept-timeout: 15s
+  timeout-sweep-interval: 1s
+
+logging:
+  level:
+    com.chess: DEBUG
