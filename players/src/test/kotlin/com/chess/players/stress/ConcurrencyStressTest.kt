@@ -6,11 +6,14 @@ import com.chess.matching.lobby.InMemoryLobbyRepository
 import com.chess.matching.matcher.MatcherConfig
 import com.chess.matching.matcher.MatcherJob
 import com.chess.players.event.MatchCancelledEvent
+import com.chess.players.event.MatchEndedEvent
 import com.chess.players.event.MatchProposedEvent
 import com.chess.players.event.MatchStartedEvent
 import com.chess.players.lobby.LobbyJoinService
 import com.chess.players.lobby.LobbyLeaveService
+import com.chess.players.match.InMemoryActiveMatchRepository
 import com.chess.players.match.InMemoryPendingMatchRepository
+import com.chess.players.match.MatchEndService
 import com.chess.players.match.MatchAcceptService
 import com.chess.players.match.MatchDeclineService
 import com.chess.players.match.MatchProposalService
@@ -57,10 +60,12 @@ class ConcurrencyStressTest {
         val lobby = InMemoryLobbyRepository()
         val states = InMemoryPlayerStateRepository()
         val pending = InMemoryPendingMatchRepository()
+        val active = InMemoryActiveMatchRepository()
 
         val started = CopyOnWriteArrayList<MatchStartedEvent>()
         val cancelled = CopyOnWriteArrayList<MatchCancelledEvent>()
         val proposed = CopyOnWriteArrayList<MatchProposedEvent>()
+        val endedEvents = CopyOnWriteArrayList<MatchEndedEvent>()
         lateinit var proposalService: MatchProposalService
         // routes events exactly like the synchronous Spring listeners do
         val publisher = ApplicationEventPublisher { e ->
@@ -69,20 +74,21 @@ class ConcurrencyStressTest {
                 is MatchStartedEvent -> started += e
                 is MatchCancelledEvent -> cancelled += e
                 is MatchProposedEvent -> proposed += e
+                is MatchEndedEvent -> endedEvents += e
             }
         }
-        val starter = MatchStartService(states, lobby, publisher, clock)
+        val starter = MatchStartService(states, lobby, active, publisher, clock)
         proposalService = MatchProposalService(states, pending, lobby, publisher)
         val join = LobbyJoinService(states, lobby, { 1500 + (it.hashCode() and 0xff) }, clock)
         val decline = MatchDeclineService(states, pending, lobby, publisher)
         val leave = LobbyLeaveService(states, lobby, decline)
         val accept = MatchAcceptService(states, pending, starter)
+        val end = MatchEndService(states, active, publisher, clock)
         val timeout = MatchTimeoutService(states, pending, lobby, Duration.ofMillis(40), clock, publisher, starter)
         val matcher = MatcherJob(lobby, SpringEventMatchHandler(publisher, clock), MatcherConfig(basePenalty = 1000.0, maxPenalty = 1000.0), clock)
 
         val running = AtomicBoolean(true)
         val actions = AtomicInteger()
-        val ended = ConcurrentHashMap.newKeySet<Pair<String, String>>() // (playerId, matchId) that "finished" the match
         val ids = List(players) { "p$it" }
 
         val threads = mutableListOf<Thread>()
@@ -107,9 +113,9 @@ class ConcurrencyStressTest {
                             in 36..38 -> accept.accept(id, "stale-match") // wrong matchId, must be a no-op
                             // otherwise: think about it — some proposals must time out
                         }
-                        PlayerState.IN_MATCH -> if (rnd.nextInt(100) < 30) {
-                            // no "match ended" flow exists yet: simulate it by leaving the flow
-                            if (states.removeIf(id, PlayerState.IN_MATCH)) ended += id to status.matchId!!
+                        PlayerState.IN_MATCH -> when (rnd.nextInt(100)) {
+                            in 0..29 -> end.end(id, status.matchId!!)
+                            in 30..32 -> end.end(id, "stale-match") // wrong matchId, must be a no-op
                         }
                     }
                     actions.incrementAndGet()
@@ -124,10 +130,11 @@ class ConcurrencyStressTest {
         threads.forEach { assertTrue(!it.isAlive, "${it.name} did not stop") }
 
         val byReason = cancelled.groupingBy { it.reason }.eachCount()
-        println("seed $seed: actions=${actions.get()} proposed=${proposed.size} started=${started.size} cancelled=$byReason ended=${ended.size} " +
+        println("seed $seed: actions=${actions.get()} proposed=${proposed.size} started=${started.size} cancelled=$byReason ended=${endedEvents.size} " +
             "final: lobby=${lobby.size()} pending=${pending.findProposedBefore(clock.instant().plusSeconds(1)).size}")
         assertTrue(proposed.size > 100, "not enough activity to mean anything: ${proposed.size} proposals")
         assertTrue(started.size > 10, "no matches started")
+        assertTrue(endedEvents.size > 10, "no matches ended")
         assertTrue(cancelled.any { it.reason == MatchCancelledEvent.Reason.DECLINED }, "no declines happened")
         if (paced) assertTrue(cancelled.any { it.reason == MatchCancelledEvent.Reason.TIMEOUT }, "no timeouts happened")
 
@@ -157,18 +164,25 @@ class ConcurrencyStressTest {
                 assertEquals(m.matchId, s?.matchId, "${p.id} is in pending ${m.matchId} but PENDING on ${s?.matchId}")
             }
         }
-        // I4: IN_MATCH ⇒ that match was started with this player; partner is IN_MATCH on it or has ended *that* match
+        // I4: IN_MATCH ⇔ an active match containing the player, started and not ended; partner IN_MATCH on the same one
         val startedById = started.associateBy { it.matchId }
+        val endedIds = endedEvents.map { it.matchId }.toSet()
         for (s in allStates.filter { it.state == PlayerState.IN_MATCH }) {
-            val m = startedById[s.matchId]
-            assertNotNull(m, "${s.playerId} is IN_MATCH on ${s.matchId} but no MatchStartedEvent for it")
+            val m = active.find(s.matchId!!)
+            assertNotNull(m, "${s.playerId} is IN_MATCH on ${s.matchId} but there is no active match")
+            assertTrue(m.contains(s.playerId), "${s.playerId} IN_MATCH on a match not containing them")
+            assertTrue(s.matchId in startedById && s.matchId !in endedIds, "${s.matchId} is active but was not started / was ended")
             val partner = if (m.playerA.id == s.playerId) m.playerB else m.playerA
-            assertTrue(m.playerA.id == s.playerId || m.playerB.id == s.playerId, "${s.playerId} IN_MATCH on a match not containing them")
             val ps = states.find(partner.id)
-            val partnerStillIn = ps?.state == PlayerState.IN_MATCH && ps.matchId == s.matchId
-            val partnerEndedIt = (partner.id to s.matchId) in ended
-            assertTrue(partnerStillIn || partnerEndedIt, "${s.playerId} IN_MATCH on ${s.matchId} but partner ${partner.id} is $ps and never ended it")
+            assertTrue(ps?.state == PlayerState.IN_MATCH && ps.matchId == s.matchId,
+                "${s.playerId} IN_MATCH on ${s.matchId} but partner ${partner.id} is $ps")
         }
+        for (e in endedEvents) {
+            assertTrue(e.matchId in startedById, "ended ${e.matchId} was never started")
+            for (id in e.playerIds) assertTrue(states.find(id)?.matchId != e.matchId, "$id still on ended match ${e.matchId}")
+        }
+        val endedList = endedEvents.map { it.matchId }
+        assertEquals(endedList.size, endedList.toSet().size, "a match was ended twice")
         // I5: every match is resolved at most once, and never both started and cancelled
         val startedIds = started.map { it.matchId }
         assertEquals(startedIds.size, startedIds.toSet().size, "a match was started twice")

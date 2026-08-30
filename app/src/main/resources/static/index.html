@@ -162,6 +162,9 @@
         <div class="player"><div class="name" id="oppName2">?</div><div class="rating" id="oppRating2"></div></div>
       </div>
       <div class="hint">match <code id="matchIdText"></code> — the board would go here</div>
+      <div class="actions" style="margin-top:1rem">
+        <button class="danger" id="leaveMatch">Leave match</button>
+      </div>
     </div>
   </div>
 </section>
@@ -259,6 +262,7 @@ $('connect').onclick = () => {
         break;
       case 'MATCH_PROPOSED': showMatch(m); toast('ok', `Match found vs ${m.opponent.id} (${m.opponent.rating})`); break;
       case 'MATCH_STARTED': showPlaying(m); toast('ok', `Game on vs ${m.opponent.id}!`); break;
+      case 'MATCH_ENDED': setState(null); toast('warn', m.endedBy === me ? 'You left the match' : `${m.endedBy} left the match`); break;
       case 'MATCH_CANCELLED': {
         const why = { DECLINED: 'declined', TIMEOUT: 'timed out', PARTNER_UNAVAILABLE: 'opponent unavailable' }[m.reason] || m.reason;
         setState(m.backInLobby ? 'WAITING' : null);
@@ -273,6 +277,7 @@ $('join').onclick = () => send({ type: 'JOIN_LOBBY' });
 $('leave').onclick = () => send({ type: 'LEAVE_LOBBY' });
 $('accept').onclick = () => { $('accept').disabled = true; $('matchHint').textContent = 'Accepted — waiting for your opponent…'; send({ type: 'ACCEPT_MATCH', matchId: currentMatch }); };
 $('decline').onclick = () => send({ type: 'DECLINE_MATCH', matchId: currentMatch });
+$('leaveMatch').onclick = () => send({ type: 'LEAVE_MATCH', matchId: $('matchIdText').textContent });
 $('playerId').addEventListener('keydown', e => { if (e.key === 'Enter') $('connect').click(); });
 $('playerId').value = localStorage.getItem('playerId') || '';
 setInterval(tick, 200);

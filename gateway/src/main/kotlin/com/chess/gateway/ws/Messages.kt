@@ -3,9 +3,9 @@ package com.chess.gateway.ws
 import com.chess.matching.lobby.LobbyPlayer
 import com.chess.players.state.PlayerState
 
-/** Client → server. `type` selects the command; `matchId` is required for ACCEPT_MATCH / DECLINE_MATCH. */
+/** Client → server. `type` selects the command; `matchId` is required for ACCEPT_MATCH / DECLINE_MATCH / LEAVE_MATCH. */
 data class Command(val type: Type, val matchId: String? = null) {
-    enum class Type { JOIN_LOBBY, LEAVE_LOBBY, ACCEPT_MATCH, DECLINE_MATCH, STATUS }
+    enum class Type { JOIN_LOBBY, LEAVE_LOBBY, ACCEPT_MATCH, DECLINE_MATCH, LEAVE_MATCH, STATUS }
 }
 
 /** Server → client. Every message carries a `type` so the client can switch on it. */
@@ -33,6 +33,10 @@ data class MatchStarted(val matchId: String, val opponent: Opponent) : ServerMes
 
 data class MatchCancelled(val matchId: String, val reason: String, val backInLobby: Boolean) : ServerMessage {
     override val type = "MATCH_CANCELLED"
+}
+
+data class MatchEnded(val matchId: String, val endedBy: String) : ServerMessage {
+    override val type = "MATCH_ENDED"
 }
 
 data class Error(val message: String) : ServerMessage {

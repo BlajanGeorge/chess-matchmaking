@@ -4,6 +4,7 @@ import com.chess.players.event.PlayerAcceptedMatchEvent
 import com.chess.players.event.PlayerDeclinedMatchEvent
 import com.chess.players.event.PlayerJoinedLobbyEvent
 import com.chess.players.event.PlayerLeftLobbyEvent
+import com.chess.players.event.PlayerLeftMatchEvent
 import com.chess.players.state.PlayerStateRepository
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -53,6 +54,7 @@ class PlayerWebSocketHandler(
             Command.Type.LEAVE_LOBBY -> publisher.publishEvent(PlayerLeftLobbyEvent(playerId))
             Command.Type.ACCEPT_MATCH -> withMatchId(playerId, command) { publisher.publishEvent(PlayerAcceptedMatchEvent(playerId, it)) }
             Command.Type.DECLINE_MATCH -> withMatchId(playerId, command) { publisher.publishEvent(PlayerDeclinedMatchEvent(playerId, it)) }
+            Command.Type.LEAVE_MATCH -> withMatchId(playerId, command) { publisher.publishEvent(PlayerLeftMatchEvent(playerId, it)) }
             Command.Type.STATUS -> Unit
         }
         sendStatus(playerId)

@@ -17,6 +17,7 @@ import java.time.Clock
 class MatchStartService(
     private val states: PlayerStateRepository,
     private val lobby: LobbyRepository,
+    private val activeMatches: ActiveMatchRepository,
     private val publisher: ApplicationEventPublisher,
     private val clock: Clock,
 ) {
@@ -29,6 +30,7 @@ class MatchStartService(
             states.compareAndSet(p.id, PlayerState.PENDING, PlayerStatus(p.id, PlayerState.IN_MATCH, match.matchId, now))
         }
         if (moved.size == players.size) {
+            activeMatches.save(ActiveMatch(match.matchId, match.playerA, match.playerB, now))
             publisher.publishEvent(MatchStartedEvent(match.matchId, match.playerA, match.playerB, now))
             return true
         }

@@ -4,9 +4,12 @@ import com.chess.matching.lobby.LobbyRepository
 import com.chess.players.event.PlayerEventListener
 import com.chess.players.lobby.LobbyJoinService
 import com.chess.players.lobby.LobbyLeaveService
+import com.chess.players.match.ActiveMatchRepository
+import com.chess.players.match.InMemoryActiveMatchRepository
 import com.chess.players.match.InMemoryPendingMatchRepository
 import com.chess.players.match.MatchAcceptService
 import com.chess.players.match.MatchDeclineService
+import com.chess.players.match.MatchEndService
 import com.chess.players.match.MatchProposalService
 import com.chess.players.match.MatchStartService
 import com.chess.players.match.MatchTimeoutJob
@@ -34,6 +37,9 @@ class PlayersConfiguration {
     fun pendingMatchRepository(): PendingMatchRepository = InMemoryPendingMatchRepository()
 
     @Bean
+    fun activeMatchRepository(): ActiveMatchRepository = InMemoryActiveMatchRepository()
+
+    @Bean
     fun ratingProvider(): RatingProvider = RandomRatingProvider()
 
     @Bean
@@ -52,9 +58,18 @@ class PlayersConfiguration {
     fun matchStartService(
         states: PlayerStateRepository,
         lobby: LobbyRepository,
+        active: ActiveMatchRepository,
         publisher: ApplicationEventPublisher,
         clock: Clock,
-    ) = MatchStartService(states, lobby, publisher, clock)
+    ) = MatchStartService(states, lobby, active, publisher, clock)
+
+    @Bean
+    fun matchEndService(
+        states: PlayerStateRepository,
+        active: ActiveMatchRepository,
+        publisher: ApplicationEventPublisher,
+        clock: Clock,
+    ) = MatchEndService(states, active, publisher, clock)
 
     @Bean
     fun matchAcceptService(states: PlayerStateRepository, pending: PendingMatchRepository, starter: MatchStartService) =
@@ -102,5 +117,6 @@ class PlayersConfiguration {
         proposalService: MatchProposalService,
         declineService: MatchDeclineService,
         acceptService: MatchAcceptService,
-    ) = PlayerEventListener(joinService, leaveService, proposalService, declineService, acceptService)
+        endService: MatchEndService,
+    ) = PlayerEventListener(joinService, leaveService, proposalService, declineService, acceptService, endService)
 }

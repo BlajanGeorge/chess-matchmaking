@@ -24,7 +24,7 @@ Sources under `src/main/kotlin`, tests under `src/test/kotlin`.
 - `matching` — lobby repository, the sort+DP `RatingMatcher`, `MatcherJob`, `MatchFoundEvent`. Framework-light.
 - `players` — per-player state machine and the services that drive it. Each user action / event has its own small
   service returning an `Outcome` enum (`LobbyJoinService`, `LobbyLeaveService`, `MatchProposalService`,
-  `MatchAcceptService`, `MatchDeclineService`, `MatchTimeoutService`, `MatchStartService`).
+  `MatchAcceptService`, `MatchDeclineService`, `MatchTimeoutService`, `MatchStartService`, `MatchEndService`).
 - `gateway` — WebSocket handler, session registry, notifier. Message DTOs in `ws/Messages.kt`.
 - `app` — Spring Boot main, `application.yml`, `static/index.html`, end-to-end test.
 
@@ -46,8 +46,9 @@ services. New collaborators are added there.
 ## Invariants to preserve (see README "Concurrency model")
 
 1. In the lobby ⇒ `WAITING`. Join: state then lobby. Leave: lobby then state.
-2. Exactly one actor resolves a pending match — whoever wins `PendingMatchRepository.remove(matchId)`. Losers must
-   not modify either player's state.
+2. Exactly one actor resolves a pending match — whoever wins `PendingMatchRepository.remove(matchId)` — and exactly
+   one ends an active one — whoever wins `ActiveMatchRepository.remove(matchId)`. Losers must not modify either
+   player's state.
 3. An accept is final: `decline`/`leave` must refuse after `accepted` contains the player.
 4. Never start a match unless both `PENDING → IN_MATCH` CAS succeed (`MatchStartService`).
 5. The matcher acts only on what it snapshotted: `LobbyRepository.claim(a, b)` removes the exact entries (same
@@ -70,5 +71,5 @@ takes ~15s and is the first thing to run after touching any state transition.
 
 ## Roadmap (not started)
 
-Heartbeat + client reconnect + disconnect grace; richer `STATUS` for `PENDING`; match-ended flow out of `IN_MATCH`;
-orphan sweeper; real `RatingProvider`; Redis/Kafka implementations; load test with fake WebSocket clients.
+Heartbeat + client reconnect + disconnect grace; richer `STATUS` for `PENDING`; match results / rating updates /
+durable history; orphan sweeper; real `RatingProvider`; Redis/Kafka implementations; load test with fake WebSocket clients.

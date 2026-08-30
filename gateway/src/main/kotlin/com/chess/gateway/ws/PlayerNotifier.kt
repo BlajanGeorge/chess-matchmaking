@@ -1,6 +1,7 @@
 package com.chess.gateway.ws
 
 import com.chess.players.event.MatchCancelledEvent
+import com.chess.players.event.MatchEndedEvent
 import com.chess.players.event.MatchProposedEvent
 import com.chess.players.event.MatchStartedEvent
 import org.springframework.context.event.EventListener
@@ -36,6 +37,11 @@ class PlayerNotifier(
     fun on(event: MatchCancelledEvent) {
         for (id in event.returnedToLobby) registry.send(id, MatchCancelled(event.matchId, event.reason.name, backInLobby = true))
         for (id in event.dropped) registry.send(id, MatchCancelled(event.matchId, event.reason.name, backInLobby = false))
+    }
+
+    @EventListener
+    fun on(event: MatchEndedEvent) {
+        for (id in event.playerIds) registry.send(id, MatchEnded(event.matchId, event.endedBy))
     }
 
     companion object {

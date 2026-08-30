@@ -25,6 +25,7 @@ class MatchTimeoutServiceTest {
     private val states = InMemoryPlayerStateRepository()
     private val pending = InMemoryPendingMatchRepository()
     private val lobby = InMemoryLobbyRepository()
+    private val active = InMemoryActiveMatchRepository()
 
     private val a = LobbyPlayer("a", 1500, t0)
     private val b = LobbyPlayer("b", 1510, t0.plusSeconds(2))
@@ -33,7 +34,7 @@ class MatchTimeoutServiceTest {
     private fun serviceAt(now: Instant): MatchTimeoutService {
         val clock = Clock.fixed(now, ZoneOffset.UTC)
         val publisher = ApplicationEventPublisher { published += it }
-        return MatchTimeoutService(states, pending, lobby, timeout, clock, publisher, MatchStartService(states, lobby, publisher, clock))
+        return MatchTimeoutService(states, pending, lobby, timeout, clock, publisher, MatchStartService(states, lobby, active, publisher, clock))
     }
 
     private fun proposed(accepted: Set<String> = emptySet()) {

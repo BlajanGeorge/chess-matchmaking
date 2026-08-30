@@ -34,6 +34,7 @@ immediately. Production-like values are in the comments there.
    - both accept → both `IN_MATCH`, `MATCH_STARTED` pushed
    - one declines / leaves → the other goes **back to the lobby with their original wait time**
    - nobody resolves it → a server-side sweeper expires it: whoever accepted returns to the lobby, the rest are dropped
+6. Either player can `LEAVE_MATCH`; the first to do so ends it for both (`MATCH_ENDED`), and both are idle again.
 
 ## The matching algorithm
 
@@ -55,7 +56,7 @@ Knobs (`matching.*`): `interval`, `base-penalty`, `penalty-per-second`, `max-pen
 | module | package | what |
 |---|---|---|
 | `matching` | `com.chess.matching` | `LobbyRepository` (in-memory stand-in for a Redis sorted set, with an atomic pair `claim`), `RatingMatcher` (sort + DP), `MatcherJob` (scheduled rounds), `MatchFoundEvent` |
-| `players` | `com.chess.players` | per-player state (`WAITING / PENDING / IN_MATCH`, CAS-guarded), pending matches with accepts, the join / leave / propose / accept / decline / timeout services, outbound `MatchProposed / MatchStarted / MatchCancelled` events |
+| `players` | `com.chess.players` | per-player state (`WAITING / PENDING / IN_MATCH`, CAS-guarded), pending and active matches, the join / leave / propose / accept / decline / timeout / end services, outbound `MatchProposed / MatchStarted / MatchCancelled / MatchEnded` events |
 | `gateway` | `com.chess.gateway` | one WebSocket per player, `playerId → session` registry, client commands → player events, async push of match events |
 | `app` | `com.chess.app` | Spring Boot main, `application.yml`, the test page, end-to-end test with real WebSocket clients |
 
@@ -63,7 +64,7 @@ Dependencies flow one way: `app → gateway → players → matching`.
 
 ## WebSocket protocol
 
-Client → server (JSON): `{"type": "JOIN_LOBBY" | "LEAVE_LOBBY" | "ACCEPT_MATCH" | "DECLINE_MATCH" | "STATUS", "matchId"?: "…"}`
+Client → server (JSON): `{"type": "JOIN_LOBBY" | "LEAVE_LOBBY" | "ACCEPT_MATCH" | "DECLINE_MATCH" | "LEAVE_MATCH" | "STATUS", "matchId"?: "…"}`
 
 Server → client, all carry `type`:
 
@@ -73,6 +74,7 @@ Server → client, all carry `type`:
 | `MATCH_PROPOSED` | `matchId`, `opponent{id, rating}`, `expiresInSeconds` | both players claimed |
 | `MATCH_STARTED` | `matchId`, `opponent` | both accepted |
 | `MATCH_CANCELLED` | `matchId`, `reason` (`DECLINED`/`TIMEOUT`/`PARTNER_UNAVAILABLE`), `backInLobby` | proposal fell through |
+| `MATCH_ENDED` | `matchId`, `endedBy` | a player left the running match; both are idle |
 | `ERROR` | `message` | bad command |
 
 ## Concurrency model
@@ -109,7 +111,7 @@ sweeper for 3s per seed, then checks every invariant above on the final state.
 
 - **No heartbeat, no reconnect, no disconnect grace.** A vanished client stays `WAITING` until a proposal times out.
 - `STATUS` in `PENDING` doesn't carry the opponent, so a reconnecting client can't rebuild the match card.
-- **`IN_MATCH` has no exit** — there is no "match ended" flow yet; a player who played once can't re-join.
+- Ending a match is just "someone left" — no result, no rating update, no durable history.
 - Pair atomicity is two CAS operations plus reverts, not one transaction; the orphan sweeper from the design is not
   built (with in-process synchronous events the window is negligible; it becomes real with Redis/Kafka).
 - Ratings are random; `RatingProvider` is the seam for a real source.

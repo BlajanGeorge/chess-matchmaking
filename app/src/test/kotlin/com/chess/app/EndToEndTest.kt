@@ -77,7 +77,7 @@ class EndToEndTest {
     fun closeAll() = clients.forEach { runCatching { it.session.close() } }
 
     @Test
-    fun `two players connect, join, get proposed, both accept, match starts`() {
+    fun `two players connect, join, get proposed, both accept, match starts, one leaves, both idle`() {
         val a = connect("e2e-a"); val b = connect("e2e-b")
         assertNull(a.latestStatus()["state"].takeUnless { it.isNull })
 
@@ -97,6 +97,13 @@ class EndToEndTest {
         assertEquals(matchId, a.expect("MATCH_STARTED")["matchId"].asText())
         assertEquals(matchId, b.expect("MATCH_STARTED")["matchId"].asText())
         assertEquals("IN_MATCH", b.latestStatus()["state"].asText())
+
+        a.send("LEAVE_MATCH", matchId)
+        assertEquals("e2e-a", a.expect("MATCH_ENDED")["endedBy"].asText())
+        assertEquals("e2e-a", b.expect("MATCH_ENDED")["endedBy"].asText())
+        assertNull(a.latestStatus()["state"].takeUnless { it.isNull })
+        b.send("STATUS")
+        assertNull(b.latestStatus()["state"].takeUnless { it.isNull })
     }
 
     @Test

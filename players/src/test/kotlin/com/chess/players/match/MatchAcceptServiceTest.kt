@@ -27,7 +27,7 @@ class MatchAcceptServiceTest {
     private val pending = InMemoryPendingMatchRepository()
     private val published = java.util.concurrent.CopyOnWriteArrayList<Any>()
     private val lobby = InMemoryLobbyRepository()
-    private val starter = MatchStartService(states, lobby, { published += it }, Clock.fixed(now, ZoneOffset.UTC))
+    private val starter = MatchStartService(states, lobby, InMemoryActiveMatchRepository(), { published += it }, Clock.fixed(now, ZoneOffset.UTC))
     private val service = MatchAcceptService(states, pending, starter)
 
     private val a = LobbyPlayer("a", 1500, t0)
