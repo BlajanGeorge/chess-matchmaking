@@ -46,39 +46,52 @@ class InMemoryLobbyRepositoryTest {
 
     @Test
     fun `given both waiting when claim then both removed`() {
-        repo.join(player("a", 1500))
-        repo.join(player("b", 1510))
+        val a = player("a", 1500); val b = player("b", 1510)
+        repo.join(a); repo.join(b)
 
-        assertTrue(repo.claim("a", "b"))
+        assertTrue(repo.claim(a, b))
         assertEquals(0, repo.size())
     }
 
     @Test
     fun `given one already gone when claim then nothing removed`() {
-        repo.join(player("a", 1500))
+        val a = player("a", 1500)
+        repo.join(a)
 
-        assertFalse(repo.claim("a", "b"))
+        assertFalse(repo.claim(a, player("b", 1510)))
         assertEquals(1, repo.size())
     }
 
     @Test
-    fun `given same id twice when claim then rejected`() {
-        repo.join(player("a", 1500))
+    fun `given player left and re-joined since the snapshot when claim then rejected and new entry kept`() {
+        val a = player("a", 1500); val b = player("b", 1510)
+        repo.join(a); repo.join(b)
+        val rejoined = a.copy(joinedAt = now.plusSeconds(3))
+        repo.leave("a"); repo.join(rejoined)
 
-        assertFalse(repo.claim("a", "a"))
+        assertFalse(repo.claim(a, b))
+        assertEquals(rejoined, repo.find("a"))
+        assertEquals(2, repo.size())
+    }
+
+    @Test
+    fun `given same id twice when claim then rejected`() {
+        val a = player("a", 1500)
+        repo.join(a)
+
+        assertFalse(repo.claim(a, a))
         assertEquals(1, repo.size())
     }
 
     @Test
     fun `given concurrent claims on the same player then exactly one succeeds`() {
-        repo.join(player("a", 1500))
-        repo.join(player("b", 1510))
-        repo.join(player("c", 1520))
+        val a = player("a", 1500); val b = player("b", 1510); val c = player("c", 1520)
+        repo.join(a); repo.join(b); repo.join(c)
 
         val pool = Executors.newFixedThreadPool(2)
         val successes = AtomicInteger()
         repeat(2) { i ->
-            pool.submit { if (repo.claim("a", if (i == 0) "b" else "c")) successes.incrementAndGet() }
+            pool.submit { if (repo.claim(a, if (i == 0) b else c)) successes.incrementAndGet() }
         }
         pool.shutdown()
         pool.awaitTermination(5, TimeUnit.SECONDS)

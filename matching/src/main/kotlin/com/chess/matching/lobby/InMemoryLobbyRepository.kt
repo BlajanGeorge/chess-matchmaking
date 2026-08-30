@@ -18,11 +18,11 @@ class InMemoryLobbyRepository : LobbyRepository {
     override fun snapshot(): List<LobbyPlayer> = players.values.sortedBy { it.rating }
 
     @Synchronized
-    override fun claim(playerIdA: String, playerIdB: String): Boolean {
-        if (playerIdA == playerIdB) return false
-        if (!players.containsKey(playerIdA) || !players.containsKey(playerIdB)) return false
-        players.remove(playerIdA)
-        players.remove(playerIdB)
+    override fun claim(a: LobbyPlayer, b: LobbyPlayer): Boolean {
+        if (a.id == b.id) return false
+        if (players[a.id] != a || players[b.id] != b) return false
+        players.remove(a.id)
+        players.remove(b.id)
         return true
     }
 

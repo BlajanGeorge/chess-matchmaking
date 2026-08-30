@@ -20,10 +20,11 @@ interface LobbyRepository {
     fun snapshot(): List<LobbyPlayer>
 
     /**
-     * Atomically removes both players, but only if both are still waiting.
-     * Returns false and changes nothing if either has already left or been claimed by someone else.
+     * Atomically removes both entries, but only if both are still present *exactly as given* (same `joinedAt`).
+     * Returns false and changes nothing if either has left, been claimed by someone else, or left and re-joined
+     * since the snapshot was taken — that re-joined entry is a different wait and belongs to the next round.
      */
-    fun claim(playerIdA: String, playerIdB: String): Boolean
+    fun claim(a: LobbyPlayer, b: LobbyPlayer): Boolean
 
     fun size(): Int
 }

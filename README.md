@@ -83,9 +83,9 @@ dedicated executor), so a slow client never stalls matchmaking.
 
 Invariants and how they are kept:
 
-- **in the lobby ⇒ `WAITING`.** Join writes state first, then the lobby; leave does the reverse. The matcher's
-  `WAITING → PENDING` step is guarded on the *exact* `WAITING` it claimed (same `joinedAt`), so a player who left and
-  re-joined in between is not moved.
+- **in the lobby ⇒ `WAITING`.** Join writes state first, then the lobby; leave does the reverse. The matcher only acts
+  on what it snapshotted: `claim` removes the *exact* lobby entries it saw and the `WAITING → PENDING` step is guarded
+  on the *exact* `WAITING` (same `joinedAt`), so a player who left and re-joined in between is neither claimed nor moved.
 - **a pending match is resolved by exactly one actor.** Decline, the second accept and the timeout sweeper all race on
   an atomic `remove(matchId)`; the winner owns both players' state, the losers touch nothing. A fully-accepted match
   that the sweeper happens to win is started, not cancelled.
@@ -102,6 +102,8 @@ mvn test -pl players -am       # one module (+ what it depends on)
 
 Naming: `given … when … then …`. The matcher is verified against brute force; accept/claim have concurrent tests; the
 `app` module has an end-to-end test driving two real WebSocket clients through join → proposal → accept → start.
+`ConcurrencyStressTest` (in `players`) runs 8 threads of random join/leave/accept/decline against the live matcher and
+sweeper for 3s per seed, then checks every invariant above on the final state.
 
 ## Known gaps / next steps
 

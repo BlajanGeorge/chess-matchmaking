@@ -50,10 +50,14 @@ services. New collaborators are added there.
    not modify either player's state.
 3. An accept is final: `decline`/`leave` must refuse after `accepted` contains the player.
 4. Never start a match unless both `PENDING → IN_MATCH` CAS succeed (`MatchStartService`).
-5. The matcher's `WAITING → PENDING` uses the exact-status `compareAndSet(expected: PlayerStatus, …)`.
+5. The matcher acts only on what it snapshotted: `LobbyRepository.claim(a, b)` removes the exact entries (same
+   `joinedAt`), and `WAITING → PENDING` uses the exact-status `compareAndSet(expected: PlayerStatus, …)`. A player who
+   left and re-joined in between is a *different* wait and is left for the next round.
 
 If a change touches these, add a test for the interleaving it protects against — the existing ones in
 `MatchAcceptServiceTest`, `MatchDeclineServiceTest`, `MatchProposalServiceTest`, `MatchTimeoutServiceTest` show the style.
+`players/…/stress/ConcurrencyStressTest` hammers everything from many threads and checks the invariants at rest; it
+takes ~15s and is the first thing to run after touching any state transition.
 
 ## Working style for this repo
 

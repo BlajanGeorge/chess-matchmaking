@@ -55,7 +55,7 @@ class MatcherJob(
         var claimFailed = 0
         var handlerFailed = 0
         for ((a, b) in result.pairs) {
-            if (!lobby.claim(a.id, b.id)) {
+            if (!lobby.claim(a, b)) {
                 claimFailed++
                 continue
             }
